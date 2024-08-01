@@ -10,6 +10,7 @@ include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 mod ffi_utils;
 
+use std::env;
 use bincode::{Decode, Encode};
 pub use ffi_utils::*;
 use std::ffi::CStr;
@@ -76,6 +77,23 @@ pub struct CtpAccountConfig {
     pub user_product_info: String,
     pub app_id: String,
     pub password: String,
+}
+
+impl CtpAccountConfig {
+    pub fn from_env() -> Self {
+        Self {
+            broker_id: env::var("BROKER_ID").expect("require BROKER_ID be set"),
+            account: env::var("USER_ID").expect("require USER_ID be set"),
+            trade_front: env::var("TRADE_ADDRESS").expect("require TRADE_ADDRESS be set"),
+            md_front: env::var("MD_ADDRESS").expect("require MD_ADDRESS be set"),
+            auth_code: env::var("AUTH_CODE").expect("require AUTH_CODE be set"),
+            app_id: env::var("APP_ID").expect("require APP_ID be set"),
+            password: env::var("PASSWORD").expect("require PASSWORD be set"),
+
+            name_server: env::var("NAME_SERVER").unwrap_or_default(),
+            user_product_info: env::var("USER_PRODUCT_INFO").unwrap_or_default(),
+        }
+    }
 }
 
 #[cfg(test)]

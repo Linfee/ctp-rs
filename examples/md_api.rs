@@ -1,11 +1,12 @@
-use std::{fs, io::Write, path::Path};
+use std::{env, fs, io::Write, path::Path};
 
-use ctp_sys::{
-    print_rsp_info, set_cstr_from_str_truncate_i8, CThostFtdcReqUserLoginField, CtpAccountConfig,
-    gb18030_cstr_to_str, trading_day_from_ctp_trading_day, ascii_cstr_to_str, ascii_cstr_to_str_i8,
-};
 use futures::StreamExt;
 use tracing::info;
+
+use ctp_sys::{
+    ascii_cstr_to_str, ascii_cstr_to_str_i8, CThostFtdcReqUserLoginField, CtpAccountConfig,
+    gb18030_cstr_to_str, print_rsp_info, set_cstr_from_str_truncate_i8, trading_day_from_ctp_trading_day,
+};
 
 #[tokio::main]
 async fn main() {
@@ -15,18 +16,7 @@ async fn main() {
     // 初始化日志
     tracing_subscriber::fmt::init();
 
-    let account = CtpAccountConfig {
-        broker_id: "9999".to_string(),
-        account: "-".to_string(),
-        trade_front: "tcp://180.168.146.187:10201".to_string(),
-        // md_front: "tcp://180.168.146.187:10131".to_string(),
-        md_front: "tcp://211.95.60.130:33213".to_string(),
-        name_server: "".to_string(),
-        auth_code: "0000000000000000".to_string(),
-        user_product_info: "".to_string(),
-        app_id: "simnow_client_test".to_string(),
-        password: "-".to_string(),
-    };
+    let account = CtpAccountConfig::from_env();
     md(&account).await;
 }
 
@@ -92,7 +82,7 @@ async fn md(ca: &CtpAccountConfig) {
                             "ru{}",
                             d.format("%Y%m").to_string().trim_start_matches("20")
                         ))
-                        .unwrap();
+                            .unwrap();
                         v.push(symbol);
                     }
                     let count = v.len() as i32;
@@ -106,7 +96,7 @@ async fn md(ca: &CtpAccountConfig) {
             OnRtnDepthMarketData(ref md) => {
                 info!("md={:?}", md);
 
-                if let Some(dmd) = md.p_depth_market_data{
+                if let Some(dmd) = md.p_depth_market_data {
                     info!("交易日期: TradingDay:{:?}", trading_day_from_ctp_trading_day(&dmd.TradingDay));
                     info!("品种（保留字段）: reserve1:{:?}", ascii_cstr_to_str_i8(&dmd.reserve1));
                     info!("交易所代码: ExchangeID::{:?}", ascii_cstr_to_str_i8(&dmd.ExchangeID));
@@ -135,7 +125,6 @@ async fn md(ca: &CtpAccountConfig) {
                     info!("合约在交易所的代码: ExchangeInstID:::{:?}", ascii_cstr_to_str_i8(&dmd.ExchangeInstID));
                     info!("上带价: BandingUpperPrice:::{:?}", &dmd.BandingUpperPrice);
                     info!("下带价: BandingLowerPrice:::{:?}", &dmd.BandingLowerPrice);
-
                 }
             }
             _ => {}

@@ -16,3 +16,4 @@ Cargo.lock
 .cache
 .idea
 wrapper.hpp
+.env
