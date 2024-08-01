@@ -1,7 +1,8 @@
 use std::{fs, io::Write, path::Path};
 
 use ctp_sys::{
-    print_rsp_info, set_cstr_from_str_truncate_i8, CThostFtdcReqUserLoginField, CtpAccountConfig, gb18030_cstr_to_str, trading_day_from_ctp_trading_day, ascii_cstr_to_str, ascii_cstr_to_str_i8,
+    print_rsp_info, set_cstr_from_str_truncate_i8, CThostFtdcReqUserLoginField, CtpAccountConfig,
+    gb18030_cstr_to_str, trading_day_from_ctp_trading_day, ascii_cstr_to_str, ascii_cstr_to_str_i8,
 };
 use futures::StreamExt;
 use tracing::info;
@@ -19,7 +20,7 @@ async fn main() {
         account: "-".to_string(),
         trade_front: "tcp://180.168.146.187:10201".to_string(),
         // md_front: "tcp://180.168.146.187:10131".to_string(),
-        md_front: "tcp://180.168.146.187:10211".to_string(),
+        md_front: "tcp://211.95.60.130:33213".to_string(),
         name_server: "".to_string(),
         auth_code: "0000000000000000".to_string(),
         user_product_info: "".to_string(),

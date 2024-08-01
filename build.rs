@@ -1,13 +1,13 @@
 use inflector::Inflector;
+use fs_extra::dir::{self, CopyOptions};
 
-use std::env::var;
 use std::{
     env,
     fs::File,
     io::Write,
     path::{Path, PathBuf},
 };
-
+use std::fs::OpenOptions;
 use clang::*;
 fn get_full_name_of_entity(e: &Entity) -> String {
     let mut v = vec![e.get_name().expect("")];
@@ -69,7 +69,8 @@ fn parse_api(tu: &TranslationUnit, api_name: &str) -> String {
                                                         "Vec<std::ffi::CString>".to_string(),
                                                         ".to_char_pp()".to_string(),
                                                     ),
-                                                    _ => panic!(""),
+                                                    _ => panic!("unhandled arguments type: {:?}, name: {}",
+                                                                tp.get_kind(), tp.get_display_name())
                                                 }
                                             }
                                             _ => (tp.get_display_name(), "".to_string()),
@@ -88,9 +89,9 @@ fn parse_api(tu: &TranslationUnit, api_name: &str) -> String {
                                             ("std::os::raw::c_char".to_string(), "".to_string())
                                         }
                                         _ => {
-                                            // (tp.get_display_name(), "".to_string())
-                                            println!("tp={:?}", tp);
-                                            panic!("");
+                                            (tp.get_display_name(), "".to_string())
+                                            // println!("tp={:?}", tp);
+                                            // panic!("");
                                         }
                                     }
                                 }
@@ -104,10 +105,26 @@ fn parse_api(tu: &TranslationUnit, api_name: &str) -> String {
                                 TypeKind::IncompleteArray => {
                                     ("Vec<std::ffi::CString>".to_string(), ".iter().map(|cs| cs.as_ptr()).collect::<Vec<_>>().as_mut_ptr() as *mut *mut i8".to_string())
                                 }
+                                TypeKind::Elaborated => {
+                                    match tp.get_display_name().as_str() {
+                                        "THOST_TE_RESUME_TYPE"| "TThostFtdcSystemInfoLenType" => {
+                                            (tp.get_display_name(), "".to_string())
+                                        }
+                                        "TThostFtdcClientSystemInfoType" => {
+                                            ("&mut TThostFtdcClientSystemInfoType".to_string(),
+                                             " as *mut std::os::raw::c_char".to_string())
+                                        }
+                                        _ => {
+                                            panic!("unhandled arguments type: {:?}, name: {}",
+                                                   tp.get_kind(), tp.get_display_name())
+                                            // (tp.get_display_name(), "".to_string())
+                                        }
+                                    }
+                                }
                                 _ => {
+                                    panic!("unhandled arguments type: {:?}, name: {}",
+                                           tp.get_kind(), tp.get_display_name())
                                     // (tp.get_display_name(), "".to_string())
-                                    println!("tp={:?}", tp);
-                                    panic!("");
                                 }
                             };
                             if rust_type == "int" {
@@ -200,11 +217,11 @@ fn parse_spi(tu: &TranslationUnit, spi_name: &str) -> String {
         }
         let full_spi_name = get_full_name_of_entity(&e);
         let vtable_struct_name = format!("{full_spi_name}VTable");
-        let full_trait_name = format!("{full_spi_name}_trait",);
+        let full_trait_name = format!("{full_spi_name}_trait", );
         let full_spi_output_enum_name = format!("{full_spi_name}Output");
         let full_static_vtable_var_name =
             Inflector::to_snake_case(&full_spi_name).to_uppercase() + "_VTABLE";
-        trait_lines.push(format!(r#"pub trait {full_trait_name}: Send {{"#,));
+        trait_lines.push(format!(r#"pub trait {full_trait_name}: Send {{"#, ));
         vtable_lines.push(format!(
             r#"
         #[repr(C)]
@@ -272,7 +289,7 @@ fn parse_spi(tu: &TranslationUnit, spi_name: &str) -> String {
                                 {
                                     TypeKind::CharS => (
                                         format!("{} : std::os::raw::c_char", arg_name),
-                                        format!("{} : * const std::os::raw::c_char", arg_name,),
+                                        format!("{} : * const std::os::raw::c_char", arg_name, ),
                                         arg_name.clone(),
                                         format!("{arg_name}:{arg_name}"),
                                     ),
@@ -281,13 +298,13 @@ fn parse_spi(tu: &TranslationUnit, spi_name: &str) -> String {
                             }
                             TypeKind::Int => (
                                 format!("{} : std::os::raw::c_int", arg_name),
-                                format!("{} : std::os::raw::c_int", arg_name,),
+                                format!("{} : std::os::raw::c_int", arg_name, ),
                                 arg_name.clone(),
                                 format!("{arg_name}:{arg_name}"),
                             ),
                             TypeKind::Bool => (
                                 format!("{} : bool", arg_name),
-                                format!("{} : bool", arg_name,),
+                                format!("{} : bool", arg_name, ),
                                 arg_name.clone(),
                                 format!("{arg_name}:{arg_name}"),
                             ),
@@ -321,7 +338,7 @@ fn parse_spi(tu: &TranslationUnit, spi_name: &str) -> String {
                 r#"{snake_fn_name}: spi_{snake_fn_name},
             "#
             ));
-            spi_output_enum_lines.push(format!(r#"{fn_name}({full_spi_name}{fn_name}Packet),"#,));
+            spi_output_enum_lines.push(format!(r#"{fn_name}({full_spi_name}{fn_name}Packet),"#, ));
             spi_output_enum_struct_lines.push(format!(
                 r#"
             #[derive(Clone, Debug)]
@@ -341,7 +358,7 @@ fn parse_spi(tu: &TranslationUnit, spi_name: &str) -> String {
                 }}
             "#,
                 format!(r#"{full_spi_output_enum_name}::{fn_name}( {full_spi_name}{fn_name}Packet {{ {} }} )"#,
-                arg_list.iter().map(|arg|{arg.3.clone()}).collect::<Vec<_>>().join(","))
+                        arg_list.iter().map(|arg| { arg.3.clone() }).collect::<Vec<_>>().join(","))
             ));
 
             c_fn_lines.push(format!(
@@ -507,68 +524,123 @@ fn generated() {
 }
 
 fn main() {
-    // 生成c++->C->Rust实现
-    generated();
-
+    println!(">>> run build.rs >>>");
     // 库配置
     // ctp 所在目录名称
     let ctp_path = "ctp";
     // 版本
-    let ctp_version = "v6.6.5_20210924";
+    let ctp_version = if cfg!(target_os = "macos") {
+        "v6.7.0"
+    } else {
+        "v6.7.2"
+    };
+
+    println!("OS: {} ARCH: {}", env::consts::OS, env::consts::ARCH);
+
 
     // 平台名称
-    let platform = if cfg!(windows) { "win" } else { "linux" };
+    let platform = env::consts::OS.to_string();
     // 架构
     let arch = if cfg!(target_arch = "x86_64") {
         "x64"
+    } else if cfg!(target_arch = "aarch64") {
+        "aarch64"
     } else {
         panic!("can not build on this platform, linux_x64 and windows_x64.")
     };
+    println!("platform: {platform}, arch: {arch}");
 
     // so 所在目录
     let so_path = format!("{}/{}/{}_{}", ctp_path, ctp_version, platform, arch);
+    println!("so_path: {so_path}");
 
     let library_path = Path::new(&so_path);
+    println!("library_path: {}", library_path.display());
     // println!("cargo:rustc-link-search={}",so_path);
     // println!("cargo:rustc-link-search=native={}", library_path.display());
 
     // 平台差异化处理
     if cfg!(windows) {
-        let output = var("OUT_DIR").unwrap();
+        let output = env::var("OUT_DIR").unwrap();
         std::fs::copy(
             library_path.join("thostmduserapi_se.dll"),
-            Path::new(&output)
-                .join("..")
-                .join("..")
-                .join("..")
+            Path::new(&output).join("..").join("..").join("..")
                 .join("thostmduserapi_se.dll"),
         )
-        .unwrap();
+            .unwrap();
         std::fs::copy(
             library_path.join("thosttraderapi_se.dll"),
-            Path::new(&output)
-                .join("..")
-                .join("..")
-                .join("..")
+            Path::new(&output).join("..").join("..").join("..")
                 .join("thosttraderapi_se.dll"),
         )
-        .unwrap();
-    } else if cfg!(unix) {
-        // 行情
+            .unwrap();
+    } else if cfg!(target_os = "linux") {
         copy_lib_to(&so_path, &String::from("thostmduserapi_se.so"));
-        // 交易
         copy_lib_to(&so_path, &String::from("thosttraderapi_se.so"));
+    } else if cfg!(target_os = "macos") {
+        let output = env::var("OUT_DIR").unwrap();
+        for filename in ["thostmduserapi_se", "thosttraderapi_se"] {
+            let src = library_path.join(format!("{filename}.framework"));
+            let dest = Path::new(&output);
+            dir::remove(Path::new(&output).join(format!("{filename}.framework"))).unwrap();
+            println!(">>> copy src: {:?} desc: {:?}", src.to_str(), dest.to_str());
+            dir::copy(src, dest, &CopyOptions::new()).unwrap();
+        }
+        println!("cargo:rustc-link-search=native={}", library_path.display());
+        // mac下设置 .framework 搜索路径
+        println!("cargo:rustc-link-search=framework={}", library_path.display());
+        // mac下设置 RPATH
+        println!("cargo:rustc-link-arg=-Wl,-rpath,{}", library_path.display());
     } else {
         println!("cargo:rustc-env=LD_LIBRARY_PATH={}", library_path.display());
     }
 
-    // 告诉 rustc 需要 link thostmduserapi_se thosttraderapi_se
-    println!("cargo:rustc-link-lib=thostmduserapi_se");
-    println!("cargo:rustc-link-lib=thosttraderapi_se");
+    if cfg!(target_os = "macos") {
+        // mac下设置 .framework 搜索路径
+        // println!("cargo:rustc-link-search=framework=/Users/linfee/Library/Frameworks");
+        println!("cargo:rustc-link-lib=framework=thostmduserapi_se");
+        println!("cargo:rustc-link-lib=framework=thosttraderapi_se");
+        // 需要 brew install gcc, 并设置 LIBRARY_PATH 和 LD_LIBRARY_PATH
+        println!("cargo:rustc-link-lib=dylib=stdc++");
+    } else {
+        // 告诉 rustc 需要 link thostmduserapi_se thosttraderapi_se
+        println!("cargo:rustc-link-lib=thostmduserapi_se");
+        println!("cargo:rustc-link-lib=thosttraderapi_se");
+        println!("cargo:rustc-link-lib=dylib=stdc++");
+    }
+
 
     // 告诉 cargo 当 wrapper.h 变化时重新运行，只有结构使用wrapper.h, 包含类定义使用wrapper.cpp
     println!("cargo:rerun-if-changed=wrapper.hpp");
-    println!("cargo:rustc-link-lib=dylib=stdc++");
+
+    let wrapper = Path::new("wrapper.hpp");
+    let mut wrapper = if wrapper.exists() {
+        OpenOptions::new().write(true).open(wrapper).expect("open wrapper.hpp fail")
+    } else {
+        File::create(wrapper).expect("create wrapper.hpp fail")
+    };
+    if cfg!(windows) {
+        wrapper.write(format!(
+            "#include \"{}/ThostFtdcMdApi.h\"\n", so_path).as_bytes()).unwrap();
+        wrapper.write(format!(
+            "#include \"{}/ThostFtdcTraderApi.h\"\n", so_path).as_bytes()
+        ).unwrap();
+    } else if cfg!(target_os = "macos") {
+        wrapper.write(format!(
+            "#include \"{}/thostmduserapi_se.framework/Headers/ThostFtdcMdApi.h\"\n", so_path)
+            .as_bytes()).unwrap();
+        wrapper.write(format!(
+            "#include \"{}/thosttraderapi_se.framework/Headers/ThostFtdcTraderApi.h\"\n", so_path)
+            .as_bytes()).unwrap();
+    } else if cfg!(target_os = "linux") {
+        wrapper.write(format!(
+            "#include \"{}/ThostFtdcMdApi.h\"\n", so_path).as_bytes()).unwrap();
+        wrapper.write(format!(
+            "#include \"{}/ThostFtdcTraderApi.h\"\n", so_path).as_bytes()).unwrap();
+    }
+
+    // 生成c++->C->Rust实现
+    generated();
 
     // 配置 bindgen，并生成 Bindings 结构
     let bindings = bindgen::Builder::default()
@@ -599,10 +671,10 @@ fn main() {
 /// 分发动态连接库
 ///
 fn copy_lib_to(so_path: &String, so_filename: &String) {
-    let out_dir = std::env::var("OUT_DIR").unwrap();
-    let current_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let out_dir = env::var("OUT_DIR").unwrap();
+    let current_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
     let so_symlink_string = format!("{}/lib{}", out_dir, so_filename);
-    let so_symlink = std::path::Path::new(&so_symlink_string);
+    let so_symlink = Path::new(&so_symlink_string);
 
     println!("cargo:rustc-link-search=native={}", out_dir);
     let target_so = format!("{}/{}", out_dir, so_filename);
@@ -624,5 +696,5 @@ fn copy_lib_to(so_path: &String, so_filename: &String) {
         &format!("{}/{}/{}", current_dir, so_path, so_filename),
         so_symlink,
     )
-    .expect("failed to create new symlink");
+        .expect("failed to create new symlink");
 }
